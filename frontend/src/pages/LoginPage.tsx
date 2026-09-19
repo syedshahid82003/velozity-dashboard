@@ -93,11 +93,29 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-6 pt-5 border-t border-gray-100">
-            <p className="text-xs text-gray-400 mb-2 font-medium">Demo accounts (password: Password123!)</p>
-            <div className="space-y-1 text-xs text-gray-500">
-              <div>Admin: <span className="font-mono">admin@velozity.dev</span></div>
-              <div>PM: <span className="font-mono">sarah.pm@velozity.dev</span></div>
-              <div>Dev: <span className="font-mono">ravi.dev@velozity.dev</span></div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+              Demo accounts — click to fill
+            </p>
+            <div className="space-y-2">
+              {[
+                { role: 'Admin', email: 'admin@velozity.dev', color: 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100' },
+                { role: 'Project Manager', email: 'sarah.pm@velozity.dev', color: 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100' },
+                { role: 'Developer', email: 'ravi.dev@velozity.dev', color: 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' },
+              ].map((account) => (
+                <button
+                  key={account.email}
+                  type="button"
+                  onClick={() => {
+                    setEmail(account.email);
+                    setPassword('Password123!');
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${account.color}`}
+                >
+                  <span>{account.role}</span>
+                  <span className="font-mono opacity-75">{account.email}</span>
+                </button>
+              ))}
+              <p className="text-xs text-gray-400 text-center pt-1">Password: <span className="font-mono">Password123!</span></p>
             </div>
           </div>
         </div>

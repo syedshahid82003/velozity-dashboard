@@ -1,0 +1,202 @@
+// Velozity Global Solutions - Database Schema
+// PostgreSQL with Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  PROJECT_MANAGER
+  DEVELOPER
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+  OVERDUE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_IN_REVIEW
+  TASK_STATUS_CHANGED
+}
+
+// -----------------------------------------------
+// Users
+// Index on email (unique lookup on login)
+// Index on role (frequent role-based filtering)
+// -----------------------------------------------
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  refreshTokens  RefreshToken[]
+  managedProjects Project[]       @relation("ProjectManager")
+  assignedTasks   Task[]          @relation("AssignedDeveloper")
+  activityLogs    ActivityLog[]
+  notifications   Notification[]  @relation("NotificationRecipient")
+
+  @@index([role])
+  @@map("users")
+}
+
+// -----------------------------------------------
+// Refresh Tokens — stored server-side for revocation
+// -----------------------------------------------
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revoked   Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+// -----------------------------------------------
+// Clients — companies that own projects
+// -----------------------------------------------
+model Client {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  company   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects Project[]
+
+  @@map("clients")
+}
+
+// -----------------------------------------------
+// Projects
+// Index on managerId (PM fetches their own projects frequently)
+// Index on clientId (join with clients)
+// -----------------------------------------------
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  clientId    String
+  managerId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client       Client        @relation(fields: [clientId], references: [id])
+  manager      User          @relation("ProjectManager", fields: [managerId], references: [id])
+  tasks        Task[]
+  activityLogs ActivityLog[]
+
+  @@index([managerId])
+  @@index([clientId])
+  @@map("projects")
+}
+
+// -----------------------------------------------
+// Tasks
+// Index on projectId (most task queries are project-scoped)
+// Index on assignedToId (developer fetches their tasks)
+// Index on status (filtering by status is very common)
+// Index on dueDate (overdue job queries by dueDate)
+// -----------------------------------------------
+model Task {
+  id           String       @id @default(uuid())
+  title        String
+  description  String?
+  projectId    String
+  assignedToId String?
+  status       TaskStatus   @default(TODO)
+  priority     TaskPriority @default(MEDIUM)
+  dueDate      DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignedTo   User?         @relation("AssignedDeveloper", fields: [assignedToId], references: [id])
+  activityLogs ActivityLog[]
+  notifications Notification[]
+
+  @@index([projectId])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("tasks")
+}
+
+// -----------------------------------------------
+// Activity Log — immutable record of every change
+// NEVER derived — always written at time of change
+// Index on projectId (PM/Admin feed queries)
+// Index on taskId (task-level history)
+// Index on userId (who made the change)
+// Index on createdAt (chronological feed ordering)
+// -----------------------------------------------
+model ActivityLog {
+  id         String   @id @default(uuid())
+  projectId  String
+  taskId     String?
+  userId     String
+  action     String   // e.g. "moved Task #12 from In Progress → In Review"
+  fromStatus String?
+  toStatus   String?
+  createdAt  DateTime @default(now())
+
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task    Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  user    User     @relation(fields: [userId], references: [id])
+
+  @@index([projectId])
+  @@index([taskId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+// -----------------------------------------------
+// Notifications — stored in DB, shown in UI
+// Index on recipientId + read (unread count queries)
+// -----------------------------------------------
+model Notification {
+  id          String           @id @default(uuid())
+  recipientId String
+  taskId      String?
+  type        NotificationType
+  message     String
+  read        Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+
+  recipient User  @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  task      Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([recipientId, read])
+  @@index([recipientId])
+  @@map("notifications")
+}

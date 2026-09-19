@@ -8,7 +8,7 @@ A full-stack web application for managing client projects, tracking task progres
 
 ## Live Demo
 
-> **App:** https://velozity-dashboard.vercel.app  
+> **App:** https://velozity-dashboard-kohl.vercel.app  
 > **API:** https://velozity-dashboard-lgv7.onrender.com  
 > **Repo:** https://github.com/syedshahid82003/velozity-dashboard
 

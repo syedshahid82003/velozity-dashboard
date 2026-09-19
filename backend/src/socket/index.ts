@@ -31,7 +31,11 @@ interface AuthenticatedSocket extends Socket {
 export function initSocket(httpServer: HttpServer): Server {
   io = new Server(httpServer, {
     cors: {
-      origin: env.CLIENT_URL,
+      origin: [
+        env.CLIENT_URL,
+        'https://velozity-dashboard-kohl.vercel.app',
+        'http://localhost:5173',
+      ],
       credentials: true,
     },
   });

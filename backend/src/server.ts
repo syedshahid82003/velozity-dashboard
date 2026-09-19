@@ -21,10 +21,21 @@ const app = express();
 const httpServer = http.createServer(app);
 
 // ─── Global Middleware ────────────────────────────────────────────────────────
+const allowedOrigins = [
+  env.CLIENT_URL,
+  'https://velozity-dashboard-kohl.vercel.app',
+  'http://localhost:5173',
+];
+
 app.use(
   cors({
-    origin: env.CLIENT_URL,
-    credentials: true, // Required for HttpOnly cookies
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, Render health checks)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error(`CORS blocked: ${origin}`));
+    },
+    credentials: true,
   })
 );
 app.use(express.json());

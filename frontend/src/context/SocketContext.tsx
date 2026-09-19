@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import type { ActivityLog } from '../types';
@@ -19,6 +19,7 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:4000';
 export function SocketProvider({ children }: { children: React.ReactNode }) {
   const { accessToken, user } = useAuth();
   const socketRef = useRef<Socket | null>(null);
+  const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [onlineCount, setOnlineCount] = useState(0);
   const [recentActivity, setRecentActivity] = useState<ActivityLog[]>([]);
@@ -27,45 +28,52 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   );
 
   useEffect(() => {
+    // Only connect when we have a valid token AND user is loaded
     if (!accessToken || !user) {
       if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
+        setSocket(null);
+        setIsConnected(false);
       }
       return;
     }
 
-    const socket = io(SOCKET_URL, {
+    // Don't create a second socket if already connected with same token
+    if (socketRef.current?.connected) return;
+
+    const newSocket = io(SOCKET_URL, {
       auth: { token: accessToken },
       reconnectionAttempts: 5,
       reconnectionDelay: 2000,
+      transports: ['websocket', 'polling'],
     });
 
-    socketRef.current = socket;
+    socketRef.current = newSocket;
+    setSocket(newSocket);
 
-    socket.on('connect', () => {
+    newSocket.on('connect', () => {
       setIsConnected(true);
-
-      // Request missed events on (re)connect
       const lastSeen = lastSeenRef.current;
       if (lastSeen) {
-        socket.emit('activity:catchup', lastSeen);
+        newSocket.emit('activity:catchup', lastSeen);
       }
     });
 
-    socket.on('disconnect', () => {
+    newSocket.on('disconnect', () => {
       setIsConnected(false);
     });
 
-    // Admin presence count
-    socket.on('presence:update', ({ onlineCount }: { onlineCount: number }) => {
+    newSocket.on('connect_error', (err) => {
+      console.warn('[Socket] Connection error:', err.message);
+    });
+
+    newSocket.on('presence:update', ({ onlineCount }: { onlineCount: number }) => {
       setOnlineCount(onlineCount);
     });
 
-    // Live activity event
-    socket.on('activity:new', (event: ActivityLog) => {
+    newSocket.on('activity:new', (event: ActivityLog) => {
       setRecentActivity((prev) => [event, ...prev].slice(0, 50));
-      // Track last-seen for catchup on reconnect
       const ts = event.createdAt;
       if (!lastSeenRef.current || ts > lastSeenRef.current) {
         lastSeenRef.current = ts;
@@ -73,8 +81,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    // Missed events after reconnect (fetched from DB server-side)
-    socket.on('activity:missed', (events: ActivityLog[]) => {
+    newSocket.on('activity:missed', (events: ActivityLog[]) => {
       if (events.length > 0) {
         setRecentActivity((prev) => {
           const combined = [...events, ...prev];
@@ -91,24 +98,25 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => {
-      socket.disconnect();
+      newSocket.disconnect();
       socketRef.current = null;
+      setSocket(null);
       setIsConnected(false);
     };
   }, [accessToken, user]);
 
-  const joinProject = (projectId: string) => {
+  const joinProject = useCallback((projectId: string) => {
     socketRef.current?.emit('project:join', projectId);
-  };
+  }, []);
 
-  const leaveProject = (projectId: string) => {
+  const leaveProject = useCallback((projectId: string) => {
     socketRef.current?.emit('project:leave', projectId);
-  };
+  }, []);
 
   return (
     <SocketContext.Provider
       value={{
-        socket: socketRef.current,
+        socket,
         isConnected,
         onlineCount,
         joinProject,

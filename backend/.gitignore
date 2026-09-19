@@ -9,8 +9,8 @@ dist/
 .env.local
 .env.production
 
-# Prisma
-prisma/migrations/
+# Prisma — keep migrations, ignore only generated client
+# prisma/migrations/
 
 # Logs
 *.log

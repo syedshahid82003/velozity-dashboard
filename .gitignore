@@ -23,4 +23,4 @@ Thumbs.db
 .idea/
 
 # Prisma generated
-backend/prisma/migrations/
+# backend/prisma/migrations/
